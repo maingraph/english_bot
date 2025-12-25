@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Vocab Duel</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #0f0f0f;
+      --bg-secondary: #1a1a1a;
+      --bg-card: #242424;
+      --bg-hover: #2d2d2d;
+      --accent: #7c3aed;
+      --accent-light: #a78bfa;
+      --accent-glow: rgba(124, 58, 237, 0.3);
+      --success: #22c55e;
+      --error: #ef4444;
+      --warning: #f59e0b;
+      --text-primary: #ffffff;
+      --text-secondary: #a1a1aa;
+      --text-muted: #71717a;
+      --border: #2d2d2d;
+      --radius: 16px;
+      --radius-sm: 10px;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .container {
+      max-width: 420px;
+      margin: 0 auto;
+      padding: 16px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Screens */
+    .screen {
+      display: none;
+      flex-direction: column;
+      flex: 1;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .screen.active {
+      display: flex;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Welcome Screen */
+    .welcome-header {
+      text-align: center;
+      padding: 40px 0 30px;
+    }
+
+    .welcome-icon {
+      font-size: 64px;
+      margin-bottom: 16px;
+      animation: bounce 2s infinite;
+    }
+
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+
+    .welcome-title {
+      font-size: 28px;
+      font-weight: 800;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, var(--accent-light), var(--accent));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .welcome-subtitle {
+      color: var(--text-secondary);
+      font-size: 15px;
+      line-height: 1.5;
+    }
+
+    .rules-card {
+      background: var(--bg-card);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin: 20px 0;
+    }
+
+    .rules-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 16px;
+    }
+
+    .rule-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .rule-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .rule-num {
+      width: 24px;
+      height: 24px;
+      background: var(--accent);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .rule-text {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+
+    /* Buttons */
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 16px 24px;
+      border: none;
+      border-radius: var(--radius);
+      font-family: inherit;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      width: 100%;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #5b21b6);
+      color: white;
+      box-shadow: 0 4px 20px var(--accent-glow);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px var(--accent-glow);
+    }
+
+    .btn-primary:active {
+      transform: translateY(0);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-secondary {
+      background: var(--bg-card);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+    }
+
+    /* Lobby Screen */
+    .lobby-status {
+      text-align: center;
+      padding: 40px 0;
+    }
+
+    .lobby-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .lobby-title {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .lobby-desc {
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+
+    .player-count {
+      background: var(--bg-card);
+      border-radius: var(--radius);
+      padding: 24px;
+      text-align: center;
+      margin: 24px 0;
+    }
+
+    .player-count-num {
+      font-size: 48px;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--success), #16a34a);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .player-count-label {
+      color: var(--text-secondary);
+      font-size: 14px;
+      margin-top: 4px;
+    }
+
+    /* Game Screen */
+    .game-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .round-badge {
+      background: var(--bg-card);
+      padding: 8px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .timer {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--bg-card);
+      padding: 8px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .timer.warning {
+      background: rgba(245, 158, 11, 0.2);
+      color: var(--warning);
+    }
+
+    .timer.danger {
+      background: rgba(239, 68, 68, 0.2);
+      color: var(--error);
+      animation: shake 0.5s infinite;
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-2px); }
+      75% { transform: translateX(2px); }
+    }
+
+    .score-bar {
+      background: var(--bg-card);
+      border-radius: var(--radius-sm);
+      padding: 12px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .score-item {
+      text-align: center;
+    }
+
+    .score-value {
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .score-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .question-card {
+      background: var(--bg-card);
+      border-radius: var(--radius);
+      padding: 24px;
+      margin-bottom: 16px;
+    }
+
+    .question-type {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent-light);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+    }
+
+    .question-text {
+      font-size: 18px;
+      font-weight: 600;
+      line-height: 1.4;
+    }
+
+    .options {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .option-btn {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px;
+      background: var(--bg-card);
+      border: 2px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--text-primary);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      text-align: left;
+    }
+
+    .option-btn:hover:not(:disabled) {
+      border-color: var(--accent);
+      background: var(--bg-hover);
+    }
+
+    .option-btn.selected {
+      border-color: var(--accent);
+      background: rgba(124, 58, 237, 0.1);
+    }
+
+    .option-btn.correct {
+      border-color: var(--success);
+      background: rgba(34, 197, 94, 0.1);
+    }
+
+    .option-btn.wrong {
+      border-color: var(--error);
+      background: rgba(239, 68, 68, 0.1);
+    }
+
+    .option-btn:disabled {
+      cursor: not-allowed;
+      opacity: 0.7;
+    }
+
+    .option-key {
+      width: 28px;
+      height: 28px;
+      background: var(--bg-secondary);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    /* Mini Leaderboard */
+    .mini-leaderboard {
+      background: var(--bg-card);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-top: auto;
+    }
+
+    .mini-lb-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+    }
+
+    .mini-lb-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .mini-lb-row:last-child {
+      border-bottom: none;
+    }
+
+    .mini-lb-row.me {
+      background: rgba(124, 58, 237, 0.1);
+      margin: 0 -16px;
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+    }
+
+    .lb-rank {
+      width: 24px;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-muted);
+    }
+
+    .lb-rank.gold { color: #fbbf24; }
+    .lb-rank.silver { color: #94a3b8; }
+    .lb-rank.bronze { color: #d97706; }
+
+    .lb-name {
+      flex: 1;
+      font-size: 14px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .lb-score {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--accent-light);
+    }
+
+    /* Results Screen */
+    .results-header {
+      text-align: center;
+      padding: 30px 0;
+    }
+
+    .results-icon {
+      font-size: 64px;
+      margin-bottom: 16px;
+    }
+
+    .results-title {
+      font-size: 26px;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+
+    .results-subtitle {
+      color: var(--text-secondary);
+      font-size: 15px;
+    }
+
+    .my-result-card {
+      background: linear-gradient(135deg, var(--accent), #5b21b6);
+      border-radius: var(--radius);
+      padding: 24px;
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .my-rank {
+      font-size: 48px;
+      font-weight: 800;
+    }
+
+    .my-rank-label {
+      font-size: 14px;
+      opacity: 0.8;
+      margin-bottom: 16px;
+    }
+
+    .my-stats {
+      display: flex;
+      justify-content: center;
+      gap: 32px;
+    }
+
+    .my-stat {
+      text-align: center;
+    }
+
+    .my-stat-value {
+      font-size: 24px;
+      font-weight: 700;
+    }
+
+    .my-stat-label {
+      font-size: 12px;
+      opacity: 0.7;
+    }
+
+    .full-leaderboard {
+      background: var(--bg-card);
+      border-radius: var(--radius);
+      padding: 16px;
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .full-lb-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+
+    .full-lb-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      border-radius: var(--radius-sm);
+      margin-bottom: 6px;
+    }
+
+    .full-lb-row.top-3 {
+      background: var(--bg-hover);
+    }
+
+    .full-lb-row.me {
+      background: rgba(124, 58, 237, 0.15);
+      border: 1px solid var(--accent);
+    }
+
+    .full-rank {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 700;
+      border-radius: 50%;
+      background: var(--bg-secondary);
+    }
+
+    .full-rank.gold {
+      background: linear-gradient(135deg, #fbbf24, #d97706);
+      color: #1a1a1a;
+    }
+
+    .full-rank.silver {
+      background: linear-gradient(135deg, #e2e8f0, #94a3b8);
+      color: #1a1a1a;
+    }
+
+    .full-rank.bronze {
+      background: linear-gradient(135deg, #d97706, #92400e);
+      color: white;
+    }
+
+    .full-name {
+      flex: 1;
+      font-size: 15px;
+      font-weight: 500;
+    }
+
+    .full-score {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--accent-light);
+    }
+
+    /* Waiting overlay */
+    .waiting-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(15, 15, 15, 0.95);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+
+    .waiting-overlay.active {
+      display: flex;
+    }
+
+    .waiting-spinner {
+      width: 48px;
+      height: 48px;
+      border: 3px solid var(--bg-card);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 16px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .waiting-text {
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+
+    /* Admin Panel */
+    .admin-panel {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--bg-secondary);
+      border-top: 1px solid var(--border);
+      padding: 12px 16px;
+      display: none;
+      gap: 8px;
+    }
+
+    .admin-panel.active {
+      display: flex;
+    }
+
+    .admin-btn {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .admin-btn.open { background: var(--success); color: white; }
+    .admin-btn.start { background: var(--accent); color: white; }
+    .admin-btn.next { background: var(--warning); color: #1a1a1a; }
+    .admin-btn.reset { background: var(--error); color: white; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Welcome Screen -->
+    <div id="welcome-screen" class="screen active">
+      <div class="welcome-header">
+        <div class="welcome-icon">🎯</div>
+        <h1 class="welcome-title">Vocab Duel</h1>
+        <p class="welcome-subtitle">Test your vocabulary in a fast-paced quiz battle!</p>
+      </div>
+
+      <div class="rules-card">
+        <h3 class="rules-title">How to Play</h3>
+        <div class="rule-item">
+          <span class="rule-num">1</span>
+          <span class="rule-text">Join the game and wait for the host to start</span>
+        </div>
+        <div class="rule-item">
+          <span class="rule-num">2</span>
+          <span class="rule-text">Answer vocabulary questions as fast as you can</span>
+        </div>
+        <div class="rule-item">
+          <span class="rule-num">3</span>
+          <span class="rule-text">Earn 2 points for fast answers, 1 for slower ones</span>
+        </div>
+        <div class="rule-item">
+          <span class="rule-num">4</span>
+          <span class="rule-text">Climb the leaderboard and win!</span>
+        </div>
+      </div>
+
+      <div style="margin-top: auto;">
+        <button id="join-btn" class="btn btn-primary" onclick="joinGame()">
+          ✨ Join Game
+        </button>
+      </div>
+    </div>
+
+    <!-- Lobby Screen -->
+    <div id="lobby-screen" class="screen">
+      <div class="lobby-status">
+        <div class="lobby-icon">⏳</div>
+        <h2 class="lobby-title">Waiting for Players</h2>
+        <p class="lobby-desc">The host will start the game soon...</p>
+      </div>
+
+      <div class="player-count">
+        <div class="player-count-num" id="player-count">0</div>
+        <div class="player-count-label">players joined</div>
+      </div>
+
+      <div style="margin-top: auto;">
+        <p style="text-align: center; color: var(--text-muted); font-size: 13px;">
+          🎮 You're in! Get ready to play.
+        </p>
+      </div>
+    </div>
+
+    <!-- Game Screen -->
+    <div id="game-screen" class="screen">
+      <div class="game-header">
+        <div class="round-badge">
+          Round <span id="current-round">1</span>/<span id="total-rounds">10</span>
+        </div>
+        <div class="timer" id="timer">
+          ⏱️ <span id="time-left">12</span>s
+        </div>
+      </div>
+
+      <div class="score-bar">
+        <div class="score-item">
+          <div class="score-value" id="my-rank">-</div>
+          <div class="score-label">Rank</div>
+        </div>
+        <div class="score-item">
+          <div class="score-value" id="my-score">0</div>
+          <div class="score-label">Points</div>
+        </div>
+        <div class="score-item">
+          <div class="score-value" id="my-correct">0</div>
+          <div class="score-label">Correct</div>
+        </div>
+      </div>
+
+      <div class="question-card">
+        <div class="question-type" id="question-type">SYNONYM</div>
+        <div class="question-text" id="question-text">Loading question...</div>
+      </div>
+
+      <div class="options" id="options">
+        <!-- Options will be inserted here -->
+      </div>
+
+      <div class="mini-leaderboard" id="mini-leaderboard">
+        <div class="mini-lb-title">🏆 Leaderboard</div>
+        <!-- Leaderboard rows will be inserted here -->
+      </div>
+    </div>
+
+    <!-- Results Screen -->
+    <div id="results-screen" class="screen">
+      <div class="results-header">
+        <div class="results-icon">🏆</div>
+        <h2 class="results-title">Game Over!</h2>
+        <p class="results-subtitle">Here are the final results</p>
+      </div>
+
+      <div class="my-result-card">
+        <div class="my-rank">#<span id="final-rank">1</span></div>
+        <div class="my-rank-label">Your Final Rank</div>
+        <div class="my-stats">
+          <div class="my-stat">
+            <div class="my-stat-value" id="final-score">0</div>
+            <div class="my-stat-label">Points</div>
+          </div>
+          <div class="my-stat">
+            <div class="my-stat-value" id="final-correct">0</div>
+            <div class="my-stat-label">Correct</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="full-leaderboard" id="full-leaderboard">
+        <div class="full-lb-title">🏆 Final Standings</div>
+        <!-- Full leaderboard will be inserted here -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Waiting Overlay -->
+  <div class="waiting-overlay" id="waiting-overlay">
+    <div class="waiting-spinner"></div>
+    <div class="waiting-text">Connecting...</div>
+  </div>
+
+  <!-- Admin Panel (only visible for admin) -->
+  <div class="admin-panel" id="admin-panel">
+    <button class="admin-btn open" onclick="adminOpen()">Open</button>
+    <button class="admin-btn start" onclick="adminStart()">Start</button>
+    <button class="admin-btn next" onclick="adminNext()">Next</button>
+    <button class="admin-btn reset" onclick="adminReset()">Reset</button>
+  </div>
+
+  <script>
+    // Telegram WebApp
+    const tg = window.Telegram?.WebApp;
+    let initData = '';
+    let myUserId = null;
+    let isAdmin = false;
+    let currentScreen = 'welcome';
+    let pollingInterval = null;
+    let lastState = null;
+
+    // Admin token (set via URL param ?admin=token)
+    const urlParams = new URLSearchParams(window.location.search);
+    const adminToken = urlParams.get('admin') || '';
+
+    if (tg) {
+      tg.ready();
+      tg.expand();
+      initData = tg.initData || '';
+      if (tg.initDataUnsafe?.user) {
+        myUserId = tg.initDataUnsafe.user.id;
+      }
+      // Match Telegram theme
+      document.documentElement.style.setProperty('--bg-primary', tg.themeParams.bg_color || '#0f0f0f');
+      document.documentElement.style.setProperty('--bg-secondary', tg.themeParams.secondary_bg_color || '#1a1a1a');
+      document.documentElement.style.setProperty('--text-primary', tg.themeParams.text_color || '#ffffff');
+    }
+
+    // Check if admin
+    if (adminToken) {
+      isAdmin = true;
+      document.getElementById('admin-panel').classList.add('active');
+      document.body.style.paddingBottom = '60px';
+    }
+
+    // API helpers - Netlify Functions
+    async function api(method, endpoint, body = null) {
+      // Netlify Functions base URL
+      const baseUrl = window.location.origin;
+      let functionUrl = `${baseUrl}/.netlify/functions/tma-api`;
+      
+      // Map endpoint to query param for routing
+      if (endpoint.includes('/join')) {
+        functionUrl += '?route=join';
+      } else if (endpoint.includes('/state')) {
+        functionUrl += '?route=state';
+      } else if (endpoint.includes('/answer')) {
+        functionUrl += '?route=answer';
+      } else if (endpoint.includes('/admin')) {
+        functionUrl += '?route=admin';
+      }
+      
+      const headers = {
+        'Content-Type': 'application/json',
+        'X-Telegram-Init-Data': initData,
+      };
+      if (adminToken) {
+        headers['X-Admin-Token'] = adminToken;
+      }
+      const opts = { method, headers };
+      if (body) opts.body = JSON.stringify(body);
+      const res = await fetch(functionUrl, opts);
+      return res.json();
+    }
+
+    // Screen management
+    function showScreen(name) {
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      document.getElementById(name + '-screen').classList.add('active');
+      currentScreen = name;
+    }
+
+    function showWaiting(show, text = 'Loading...') {
+      const overlay = document.getElementById('waiting-overlay');
+      overlay.querySelector('.waiting-text').textContent = text;
+      overlay.classList.toggle('active', show);
+    }
+
+    // Join game
+    async function joinGame() {
+      const btn = document.getElementById('join-btn');
+      btn.disabled = true;
+      btn.textContent = 'Joining...';
+
+      try {
+        const res = await api('POST', '/api/join');
+        if (res.ok) {
+          showScreen('lobby');
+          startPolling();
+        } else {
+          btn.disabled = false;
+          btn.innerHTML = '✨ Join Game';
+          alert(res.error || 'Could not join. Try again.');
+        }
+      } catch (e) {
+        btn.disabled = false;
+        btn.innerHTML = '✨ Join Game';
+        alert('Connection error. Try again.');
+      }
+    }
+
+    // Polling for state updates
+    function startPolling() {
+      if (pollingInterval) clearInterval(pollingInterval);
+      pollingInterval = setInterval(fetchState, 500);
+      fetchState();
+    }
+
+    async function fetchState() {
+      try {
+        const state = await api('GET', '/api/state');
+        updateUI(state);
+        lastState = state;
+      } catch (e) {
+        console.error('Fetch state error:', e);
+      }
+    }
+
+    function updateUI(state) {
+      // Update player count
+      document.getElementById('player-count').textContent = state.player_count || 0;
+
+      // Screen transitions
+      if (state.is_finished && currentScreen !== 'results') {
+        showScreen('results');
+        renderResults(state);
+      } else if (state.is_running && currentScreen !== 'game') {
+        showScreen('game');
+      } else if (state.is_open && !state.is_running && currentScreen === 'welcome') {
+        // Auto-join if lobby is open
+      }
+
+      // Game screen updates
+      if (currentScreen === 'game' && state.is_running) {
+        document.getElementById('current-round').textContent = state.current_round;
+        document.getElementById('total-rounds').textContent = state.total_rounds;
+        
+        // Timer
+        const timeLeft = Math.ceil(state.time_remaining);
+        document.getElementById('time-left').textContent = timeLeft;
+        const timer = document.getElementById('timer');
+        timer.classList.remove('warning', 'danger');
+        if (timeLeft <= 3) timer.classList.add('danger');
+        else if (timeLeft <= 6) timer.classList.add('warning');
+
+        // My stats
+        document.getElementById('my-rank').textContent = state.my_rank ? `#${state.my_rank}` : '-';
+        document.getElementById('my-score').textContent = state.my_score || 0;
+        document.getElementById('my-correct').textContent = state.my_correct || 0;
+
+        // Question
+        if (state.question) {
+          document.getElementById('question-type').textContent = state.question.task_type;
+          document.getElementById('question-text').innerHTML = state.question.prompt;
+          renderOptions(state.question.options, state.already_answered);
+        }
+
+        // Mini leaderboard
+        renderMiniLeaderboard(state.leaderboard, state.my_rank);
+      }
+    }
+
+    function renderOptions(options, alreadyAnswered) {
+      const container = document.getElementById('options');
+      const keys = ['A', 'B', 'C', 'D'];
+      
+      container.innerHTML = options.map((opt, i) => `
+        <button class="option-btn ${alreadyAnswered ? 'selected' : ''}" 
+                onclick="submitAnswer(${i})" 
+                ${alreadyAnswered ? 'disabled' : ''}>
+          <span class="option-key">${keys[i]}</span>
+          <span>${escapeHtml(opt)}</span>
+        </button>
+      `).join('');
+    }
+
+    function renderMiniLeaderboard(leaderboard, myRank) {
+      const container = document.getElementById('mini-leaderboard');
+      if (!leaderboard || leaderboard.length === 0) {
+        container.innerHTML = '<div class="mini-lb-title">🏆 Leaderboard</div><p style="color: var(--text-muted); font-size: 13px;">No data yet</p>';
+        return;
+      }
+
+      let html = '<div class="mini-lb-title">🏆 Top 5</div>';
+      leaderboard.forEach((p, i) => {
+        const rankClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+        const isMe = p.user_id === myUserId;
+        html += `
+          <div class="mini-lb-row ${isMe ? 'me' : ''}">
+            <span class="lb-rank ${rankClass}">${p.rank}</span>
+            <span class="lb-name">${escapeHtml(p.name)}${isMe ? ' (You)' : ''}</span>
+            <span class="lb-score">${p.score}</span>
+          </div>
+        `;
+      });
+      container.innerHTML = html;
+    }
+
+    function renderResults(state) {
+      document.getElementById('final-rank').textContent = state.my_rank || '?';
+      document.getElementById('final-score').textContent = state.my_score || 0;
+      document.getElementById('final-correct').textContent = state.my_correct || 0;
+
+      const container = document.getElementById('full-leaderboard');
+      const lb = state.final_leaderboard || [];
+
+      let html = '<div class="full-lb-title">🏆 Final Standings</div>';
+      lb.forEach((p, i) => {
+        const rankClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+        const isMe = p.user_id === myUserId;
+        html += `
+          <div class="full-lb-row ${i < 3 ? 'top-3' : ''} ${isMe ? 'me' : ''}">
+            <span class="full-rank ${rankClass}">${p.rank}</span>
+            <span class="full-name">${escapeHtml(p.name)}${isMe ? ' ⭐' : ''}</span>
+            <span class="full-score">${p.score} pts</span>
+          </div>
+        `;
+      });
+      container.innerHTML = html;
+    }
+
+    // Submit answer
+    async function submitAnswer(choice) {
+      const buttons = document.querySelectorAll('.option-btn');
+      buttons.forEach((btn, i) => {
+        btn.disabled = true;
+        if (i === choice) btn.classList.add('selected');
+      });
+
+      try {
+        await api('POST', '/api/answer', { choice });
+      } catch (e) {
+        console.error('Submit answer error:', e);
+      }
+    }
+
+    // Admin functions
+    async function adminOpen() {
+      await api('POST', '/api/admin/open', { rounds: 10, seconds: 12 });
+    }
+
+    async function adminStart() {
+      await api('POST', '/api/admin/start');
+    }
+
+    async function adminNext() {
+      await api('POST', '/api/admin/next');
+    }
+
+    async function adminReset() {
+      if (confirm('Reset the game?')) {
+        await api('POST', '/api/admin/reset');
+        showScreen('welcome');
+        document.getElementById('join-btn').disabled = false;
+        document.getElementById('join-btn').innerHTML = '✨ Join Game';
+      }
+    }
+
+    // Utils
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Start polling on load
+    startPolling();
+  </script>
+</body>
+</html>
+
