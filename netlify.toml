@@ -5,10 +5,10 @@
 [build.environment]
   PYTHON_VERSION = "3.11"
 
-# API routes to Netlify Function
+# API routes to Netlify Function (preserve path for routing)
 [[redirects]]
   from = "/api/*"
-  to = "/.netlify/functions/tma-api"
+  to = "/.netlify/functions/tma-api/:splat"
   status = 200
 
 # All other routes to index.html (SPA)

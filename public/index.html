@@ -893,12 +893,15 @@
         } else {
           btn.disabled = false;
           btn.innerHTML = '✨ Join Game';
-          alert(res.error || 'Could not join. Try again.');
+          const errorMsg = res.error || 'Could not join. Try again.';
+          alert(errorMsg);
+          console.error('Join error:', res);
         }
       } catch (e) {
         btn.disabled = false;
         btn.innerHTML = '✨ Join Game';
-        alert('Connection error. Try again.');
+        console.error('Join exception:', e);
+        alert('Connection error: ' + (e.message || 'Try again.'));
       }
     }
 
