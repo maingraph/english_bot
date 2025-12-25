@@ -4,7 +4,9 @@
 
 ⚠️ **The Telegram bot (`bot.py`) CANNOT run on Netlify** - it needs continuous polling which requires a long-running process. You'll need to run the bot separately (locally or on another service like Railway/Render).
 
-✅ **The TMA (Telegram Mini App) CAN run on Netlify** - it's been adapted to work as serverless functions.
+✅ **The TMA (Telegram Mini App) CAN run on Netlify** — as **static frontend** + **Netlify Functions in JavaScript**.
+
+⚠️ Netlify Functions **do not run Python**. Any `netlify/functions/*.py` will not execute in production.
 
 ---
 
@@ -24,7 +26,7 @@ Make sure your `netlify.toml` looks like this:
 
 [[redirects]]
   from = "/api/*"
-  to = "/.netlify/functions/tma-api?route=:splat"
+  to = "/.netlify/functions/tma-api/:splat"
   status = 200
 
 [[redirects]]
@@ -42,7 +44,7 @@ duel-ladder-bot/
 │   └── index.html          # TMA frontend
 ├── netlify/
 │   └── functions/
-│       └── tma-api.py      # API serverless function
+│       └── tma-api.js      # API serverless function (Node)
 ├── duel_ladder_bot/        # Your Python package
 ├── requirements.txt
 └── netlify.toml
@@ -60,7 +62,7 @@ ADMIN_TOKEN=classroom2024
 DB_PATH=duel_ladder.sqlite3
 ```
 
-**Note:** Netlify Functions can't use SQLite files directly (they're read-only). For a full deployment, you'd need to use a database service. For a **classroom demo**, the simplified function uses in-memory state.
+**Note:** Netlify Functions can’t reliably use SQLite. This project exports vocab into `public/vocab.json` and the function serves questions from that.
 
 ---
 
@@ -84,7 +86,7 @@ DB_PATH=duel_ladder.sqlite3
 
 ## Step 4: Update Frontend API URLs
 
-The frontend in `public/index.html` needs to use Netlify's function URLs. Update the API calls:
+The frontend in `public/index.html` should call `/api/...` (Netlify redirects those to the function). Update the API calls:
 
 **Find this in `public/index.html` (around line 840-850):**
 ```javascript
@@ -98,18 +100,14 @@ async function api(method, endpoint, body = null) {
   }
   const opts = { method, headers };
   if (body) opts.body = JSON.stringify(body);
-  const res = await fetch(endpoint, opts);  // <-- This needs to change
+  const res = await fetch(endpoint, opts);
   return res.json();
 }
 ```
 
-**Change to:**
+**Change to (keep using `/api/...`):**
 ```javascript
 async function api(method, endpoint, body = null) {
-  // Netlify Functions base URL
-  const baseUrl = window.location.origin;
-  const functionUrl = `${baseUrl}/.netlify/functions/tma-api`;
-  
   const headers = {
     'Content-Type': 'application/json',
     'X-Telegram-Init-Data': initData,
@@ -132,7 +130,7 @@ async function api(method, endpoint, body = null) {
   
   const opts = { method, headers };
   if (body) opts.body = JSON.stringify(body);
-  const res = await fetch(url, opts);
+  const res = await fetch(endpoint, opts);
   return res.json();
 }
 ```

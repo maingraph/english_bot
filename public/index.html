@@ -836,23 +836,8 @@
       document.body.style.paddingBottom = '60px';
     }
 
-    // API helpers - Netlify Functions
+    // API helpers (Netlify redirect: /api/* -> /.netlify/functions/tma-api/*)
     async function api(method, endpoint, body = null) {
-      // Netlify Functions base URL
-      const baseUrl = window.location.origin;
-      let functionUrl = `${baseUrl}/.netlify/functions/tma-api`;
-      
-      // Map endpoint to query param for routing
-      if (endpoint.includes('/join')) {
-        functionUrl += '?route=join';
-      } else if (endpoint.includes('/state')) {
-        functionUrl += '?route=state';
-      } else if (endpoint.includes('/answer')) {
-        functionUrl += '?route=answer';
-      } else if (endpoint.includes('/admin')) {
-        functionUrl += '?route=admin';
-      }
-      
       const headers = {
         'Content-Type': 'application/json',
         'X-Telegram-Init-Data': initData,
@@ -862,7 +847,7 @@
       }
       const opts = { method, headers };
       if (body) opts.body = JSON.stringify(body);
-      const res = await fetch(functionUrl, opts);
+      const res = await fetch(endpoint, opts);
       return res.json();
     }
 
