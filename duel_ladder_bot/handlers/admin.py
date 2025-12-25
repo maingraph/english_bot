@@ -75,8 +75,8 @@ async def cmd_tma_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     )
     await update.effective_message.reply_text(
         "🛠 <b>Admin Mini App</b>\n\n"
-        "Open it using the button below (this ensures Telegram passes auth).\n\n"
-        f"Raw link (may open in browser): {admin_url}",
+        "Open it using the button below.\n"
+        "<i>(Do not open the URL directly — it won’t authenticate.)</i>",
         parse_mode="HTML",
         reply_markup=kb,
     )

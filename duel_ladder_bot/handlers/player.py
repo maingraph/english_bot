@@ -1,6 +1,6 @@
 import html
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
 from telegram.ext import ContextTypes
 
 from ..config import GLOBAL_CHAT_ID
@@ -61,9 +61,15 @@ async def cmd_play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             "Mini App URL is not configured yet. Set env var TMA_URL and restart the bot."
         )
         return
+    kb = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("🎮 Open Game (Mini App)", web_app=WebAppInfo(url=tma_url))]]
+    )
     await update.effective_message.reply_text(
-        f"🎮 Open the game here:\n{tma_url}\n\n(If you see a blank screen, make sure the URL is HTTPS.)",
-        reply_markup=reply_kb_main(),
+        "🎮 <b>Mini App</b>\n\n"
+        "Tap the button below to open the game inside Telegram.\n"
+        "<i>(Do not open the URL directly — it won’t authenticate.)</i>",
+        parse_mode="HTML",
+        reply_markup=kb,
     )
 
 async def cmd_leave(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -18,6 +18,8 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 
+const API_VERSION = "2025-12-25";
+
 const BOT_TOKEN = process.env.BOT_TOKEN || "";
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || "classroom2024";
 const ADMIN_IDS = (process.env.ADMIN_IDS || "")
@@ -27,11 +29,13 @@ const ADMIN_IDS = (process.env.ADMIN_IDS || "")
 
 // Load vocab once (bundled from public/vocab.json)
 let VOCAB = [];
+let VOCAB_LOAD_ERROR = "";
 try {
   const vocabPath = path.join(process.cwd(), "public", "vocab.json");
   VOCAB = JSON.parse(fs.readFileSync(vocabPath, "utf8"));
 } catch (e) {
   VOCAB = [];
+  VOCAB_LOAD_ERROR = String(e && e.message ? e.message : e);
 }
 
 // In-memory game (persists only while the function instance stays warm)
@@ -48,6 +52,21 @@ const game = global.__TMA_GAME__ || {
   answers: new Map(), // userId -> {choice, ms}
 };
 global.__TMA_GAME__ = game;
+
+// Simple in-memory ring-buffer logs (survive while instance stays warm)
+const LOGS = global.__TMA_LOGS__ || [];
+global.__TMA_LOGS__ = LOGS;
+function log(level, message, extra = null) {
+  const entry = { ts: new Date().toISOString(), level, message, extra };
+  LOGS.push(entry);
+  while (LOGS.length > 200) LOGS.shift();
+  // Also emit to Netlify logs
+  try {
+    console.log(JSON.stringify(entry));
+  } catch {
+    console.log(level, message);
+  }
+}
 
 function json(statusCode, data) {
   return {
@@ -208,162 +227,297 @@ function endRoundIfNeeded() {
 }
 
 exports.handler = async (event) => {
-  const method = event.httpMethod || "GET";
-  const headers = event.headers || {};
-  const p = event.path || "";
-  const body = event.body ? JSON.parse(event.body) : {};
+  const reqId =
+    (event.headers && (event.headers["x-nf-request-id"] || event.headers["X-Nf-Request-Id"])) ||
+    crypto.randomUUID();
 
-  // route extraction:
-  // /.netlify/functions/tma-api/join OR /api/join (after redirects)
-  const routePart = p.split("/").slice(-2).join("/"); // e.g. "api/join" or "tma-api/join"
-  const isJoin = routePart.endsWith("/join");
-  const isState = routePart.endsWith("/state");
-  const isAnswer = routePart.endsWith("/answer");
-  const isAdmin = p.includes("/admin/");
+  try {
+    const method = event.httpMethod || "GET";
+    const headers = event.headers || {};
+    const p = event.path || "";
+    const body = event.body ? JSON.parse(event.body) : {};
 
-  // auth
-  const initData = header(headers, "X-Telegram-Init-Data");
-  const user = parseInitData(initData);
-  const userId = user && user.id;
-  const name = user
-    ? `${user.first_name || "Player"}${user.last_name ? " " + user.last_name : ""}`.trim()
-    : "Player";
+    // route extraction:
+    // /.netlify/functions/tma-api/join OR /api/join (after redirects)
+    const routePart = p.split("/").slice(-2).join("/"); // e.g. "api/join" or "tma-api/join"
+    const isJoin = routePart.endsWith("/join");
+    const isState = routePart.endsWith("/state");
+    const isAnswer = routePart.endsWith("/answer");
+    const isDebug = routePart.endsWith("/debug");
+    const isAdmin = p.includes("/admin/");
 
-  // allow CORS preflight
-  if (method === "OPTIONS") return json(200, { ok: true });
+    // auth
+    const initData = header(headers, "X-Telegram-Init-Data");
+    const user = parseInitData(initData);
+    const userId = user && user.id;
+    const name = user
+      ? `${user.first_name || "Player"}${user.last_name ? " " + user.last_name : ""}`.trim()
+      : "Player";
 
-  // Admin endpoints
-  if (isAdmin) {
-    const adminToken = header(headers, "X-Admin-Token");
-    if (!BOT_TOKEN) {
-      return json(500, { ok: false, error: "Server misconfigured: BOT_TOKEN is missing in Netlify env vars." });
-    }
-    if (!userId) {
-      return json(401, { ok: false, error: "Invalid auth: open this inside Telegram (initData missing/invalid)." });
-    }
-    if (!isTelegramAdmin(userId)) {
-      return json(403, { ok: false, error: "Admins only (your Telegram user_id is not in ADMIN_IDS)." });
-    }
-    if (adminToken !== ADMIN_TOKEN) {
-      return json(403, { ok: false, error: "Unauthorized (bad admin token)." });
-    }
+    log("info", "request", {
+      req_id: reqId,
+      method,
+      path: p,
+      route: routePart,
+      has_init_data: Boolean(initData),
+      user_id: userId || null,
+      vocab_count: VOCAB.length,
+      vocab_load_error: VOCAB_LOAD_ERROR || null,
+    });
 
-    if (method !== "POST") return json(405, { ok: false, error: "Method not allowed" });
+    // allow CORS preflight
+    if (method === "OPTIONS") return json(200, { ok: true });
 
-    if (p.endsWith("/admin/open")) {
-      game.isOpen = true;
-      game.isRunning = false;
-      game.isFinished = false;
-      game.players = new Map();
-      game.answers = new Map();
-      game.currentRound = 0;
-      game.totalRounds = Number(body.rounds || 10);
-      game.roundSeconds = Number(body.seconds || 12);
-      game.question = null;
-      game.roundStartMs = 0;
-      return json(200, { ok: true });
-    }
-
-    if (p.endsWith("/admin/start")) {
-      if (!game.isOpen) return json(400, { ok: false, error: "Lobby not open" });
-      if (game.players.size < 1) return json(400, { ok: false, error: "Need at least 1 player" });
-      game.isOpen = false;
-      game.isRunning = true;
-      game.isFinished = false;
-      game.currentRound = 1;
-      game.question = buildQuestion();
-      game.roundStartMs = nowMs();
-      game.answers = new Map();
-      return json(200, { ok: true });
-    }
-
-    if (p.endsWith("/admin/next")) {
-      if (!game.isRunning) return json(400, { ok: false, error: "Game not running" });
-      // Force end current round and move on
-      game.roundStartMs = 0;
-      endRoundIfNeeded();
-      return json(200, { ok: true });
-    }
-
-    if (p.endsWith("/admin/reset")) {
-      game.isOpen = false;
-      game.isRunning = false;
-      game.isFinished = false;
-      game.players = new Map();
-      game.answers = new Map();
-      game.currentRound = 0;
-      game.question = null;
-      game.roundStartMs = 0;
-      return json(200, { ok: true });
-    }
-
-    return json(404, { ok: false, error: "Unknown admin route" });
-  }
-
-  // Player endpoints
-  if (isJoin && method === "POST") {
-    if (!BOT_TOKEN) {
-      return json(500, { ok: false, error: "Server misconfigured: BOT_TOKEN is missing in Netlify env vars." });
-    }
-    if (!userId) {
-      return json(401, {
-        ok: false,
-        error:
-          "Invalid auth. Open the Mini App from the bot button inside Telegram (not a browser link).",
+    // Debug endpoint (admins only)
+    if (isDebug) {
+      const adminToken = header(headers, "X-Admin-Token");
+      if (!BOT_TOKEN) {
+        return json(500, {
+          ok: false,
+          error: "Server misconfigured: BOT_TOKEN is missing in Netlify env vars.",
+          req_id: reqId,
+        });
+      }
+      if (!userId) {
+        return json(401, {
+          ok: false,
+          error: "Invalid auth: open this inside Telegram (initData missing/invalid).",
+          req_id: reqId,
+        });
+      }
+      if (!isTelegramAdmin(userId)) {
+        return json(403, { ok: false, error: "Admins only.", req_id: reqId });
+      }
+      if (adminToken !== ADMIN_TOKEN) {
+        return json(403, { ok: false, error: "Unauthorized (bad admin token).", req_id: reqId });
+      }
+      return json(200, {
+        ok: true,
+        req_id: reqId,
+        version: API_VERSION,
+        vocab_count: VOCAB.length,
+        vocab_load_error: VOCAB_LOAD_ERROR || null,
+        game: {
+          is_open: game.isOpen,
+          is_running: game.isRunning,
+          is_finished: game.isFinished,
+          player_count: game.players.size,
+          current_round: game.currentRound,
+          total_rounds: game.totalRounds,
+          round_seconds: game.roundSeconds,
+          time_remaining: timeRemainingSeconds(),
+          has_question: Boolean(game.question),
+        },
+        logs: LOGS.slice(-120),
       });
     }
-    if (!game.isOpen || game.isRunning || game.isFinished) {
-      return json(400, { ok: false, error: "Lobby not open (host must press Open)." });
-    }
-    if (!game.players.has(userId)) {
-      game.players.set(userId, { name, score: 0, correct: 0, wrong: 0 });
-    }
-    return json(200, { ok: true });
-  }
 
-  if (isState && method === "GET") {
-    // tick
-    endRoundIfNeeded();
-    const lb = leaderboard(5);
-    const me = userId ? game.players.get(userId) : null;
-    return json(200, {
-      is_open: game.isOpen,
-      is_running: game.isRunning,
-      is_finished: game.isFinished,
-      player_count: game.players.size,
-      current_round: game.currentRound,
-      total_rounds: game.totalRounds,
-      time_remaining: timeRemainingSeconds(),
-      leaderboard: lb,
-      my_rank: userId ? myRank(userId) : null,
-      my_score: me ? me.score : 0,
-      my_correct: me ? me.correct : 0,
-      already_answered: userId ? game.answers.has(userId) : false,
-      question: game.isRunning && game.question
-        ? { task_type: game.question.taskType, prompt: game.question.prompt, options: game.question.options }
-        : null,
-      final_leaderboard: game.isFinished ? leaderboard(999) : null,
+    // Admin endpoints
+    if (isAdmin) {
+      const adminToken = header(headers, "X-Admin-Token");
+      if (!BOT_TOKEN) {
+        return json(500, {
+          ok: false,
+          error: "Server misconfigured: BOT_TOKEN is missing in Netlify env vars.",
+          req_id: reqId,
+        });
+      }
+      if (!userId) {
+        return json(401, {
+          ok: false,
+          error: "Invalid auth: open this inside Telegram (initData missing/invalid).",
+          req_id: reqId,
+        });
+      }
+      if (!isTelegramAdmin(userId)) {
+        return json(403, {
+          ok: false,
+          error: "Admins only (your Telegram user_id is not in ADMIN_IDS).",
+          req_id: reqId,
+        });
+      }
+      if (adminToken !== ADMIN_TOKEN) {
+        return json(403, { ok: false, error: "Unauthorized (bad admin token).", req_id: reqId });
+      }
+
+      if (method !== "POST") return json(405, { ok: false, error: "Method not allowed", req_id: reqId });
+
+      if (p.endsWith("/admin/open")) {
+        game.isOpen = true;
+        game.isRunning = false;
+        game.isFinished = false;
+        game.players = new Map();
+        game.answers = new Map();
+        game.currentRound = 0;
+        game.totalRounds = Number(body.rounds || 10);
+        game.roundSeconds = Number(body.seconds || 12);
+        game.question = null;
+        game.roundStartMs = 0;
+        log("info", "admin_open", { req_id: reqId, rounds: game.totalRounds, seconds: game.roundSeconds });
+        return json(200, { ok: true, req_id: reqId });
+      }
+
+      if (p.endsWith("/admin/start")) {
+        if (!VOCAB.length) {
+          log("error", "admin_start_failed_no_vocab", { req_id: reqId, vocab_load_error: VOCAB_LOAD_ERROR || null });
+          return json(500, {
+            ok: false,
+            error:
+              "No vocabulary loaded on server, so questions can't be generated. Fix: ensure public/vocab.json is bundled with the Netlify Function (see netlify.toml functions.included_files).",
+            req_id: reqId,
+            vocab_count: VOCAB.length,
+            vocab_load_error: VOCAB_LOAD_ERROR || null,
+          });
+        }
+        if (!game.isOpen) return json(400, { ok: false, error: "Lobby not open", req_id: reqId });
+        if (game.players.size < 1) return json(400, { ok: false, error: "Need at least 1 player", req_id: reqId });
+        game.isOpen = false;
+        game.isRunning = true;
+        game.isFinished = false;
+        game.currentRound = 1;
+        game.question = buildQuestion();
+        if (!game.question) {
+          log("error", "admin_start_failed_question_null", { req_id: reqId, vocab_count: VOCAB.length });
+          return json(500, {
+            ok: false,
+            error: "Failed to build first question (server returned null).",
+            req_id: reqId,
+            vocab_count: VOCAB.length,
+          });
+        }
+        game.roundStartMs = nowMs();
+        game.answers = new Map();
+        log("info", "admin_start", { req_id: reqId, player_count: game.players.size });
+        return json(200, { ok: true, req_id: reqId });
+      }
+
+      if (p.endsWith("/admin/next")) {
+        if (!game.isRunning) return json(400, { ok: false, error: "Game not running", req_id: reqId });
+        // Force end current round and move on
+        game.roundStartMs = 0;
+        endRoundIfNeeded();
+        if (game.isRunning && !game.question) {
+          log("error", "admin_next_left_no_question", { req_id: reqId });
+        }
+        return json(200, { ok: true, req_id: reqId });
+      }
+
+      if (p.endsWith("/admin/reset")) {
+        game.isOpen = false;
+        game.isRunning = false;
+        game.isFinished = false;
+        game.players = new Map();
+        game.answers = new Map();
+        game.currentRound = 0;
+        game.question = null;
+        game.roundStartMs = 0;
+        log("info", "admin_reset", { req_id: reqId });
+        return json(200, { ok: true, req_id: reqId });
+      }
+
+      return json(404, { ok: false, error: "Unknown admin route", req_id: reqId });
+    }
+
+    // Player endpoints
+    if (isJoin && method === "POST") {
+      if (!BOT_TOKEN) {
+        return json(500, {
+          ok: false,
+          error: "Server misconfigured: BOT_TOKEN is missing in Netlify env vars.",
+          req_id: reqId,
+        });
+      }
+      if (!userId) {
+        return json(401, {
+          ok: false,
+          error:
+            "Invalid auth. Open the Mini App from the bot button inside Telegram (not a browser link).",
+          req_id: reqId,
+        });
+      }
+      if (!game.isOpen || game.isRunning || game.isFinished) {
+        return json(400, { ok: false, error: "Lobby not open (host must press Open).", req_id: reqId });
+      }
+      if (!game.players.has(userId)) {
+        game.players.set(userId, { name, score: 0, correct: 0, wrong: 0 });
+        log("info", "player_join", { req_id: reqId, user_id: userId });
+      }
+      return json(200, { ok: true, req_id: reqId });
+    }
+
+    if (isState && method === "GET") {
+      // tick
+      endRoundIfNeeded();
+      const lb = leaderboard(5);
+      const me = userId ? game.players.get(userId) : null;
+
+      let serverWarning = null;
+      if (game.isRunning && !game.question) {
+        serverWarning = !VOCAB.length
+          ? "Server has no vocabulary loaded (cannot build questions)."
+          : "Server failed to build a question (question is null).";
+        log("warn", "state_running_no_question", {
+          req_id: reqId,
+          vocab_count: VOCAB.length,
+          vocab_load_error: VOCAB_LOAD_ERROR || null,
+        });
+      }
+
+      return json(200, {
+        ok: true,
+        req_id: reqId,
+        version: API_VERSION,
+        server_time_ms: nowMs(),
+        server_warning: serverWarning,
+        is_open: game.isOpen,
+        is_running: game.isRunning,
+        is_finished: game.isFinished,
+        player_count: game.players.size,
+        current_round: game.currentRound,
+        total_rounds: game.totalRounds,
+        time_remaining: timeRemainingSeconds(),
+        leaderboard: lb,
+        my_rank: userId ? myRank(userId) : null,
+        my_score: me ? me.score : 0,
+        my_correct: me ? me.correct : 0,
+        already_answered: userId ? game.answers.has(userId) : false,
+        question:
+          game.isRunning && game.question
+            ? { task_type: game.question.taskType, prompt: game.question.prompt, options: game.question.options }
+            : null,
+        final_leaderboard: game.isFinished ? leaderboard(999) : null,
+      });
+    }
+
+    if (isAnswer && method === "POST") {
+      if (!BOT_TOKEN) {
+        return json(500, {
+          ok: false,
+          error: "Server misconfigured: BOT_TOKEN is missing in Netlify env vars.",
+          req_id: reqId,
+        });
+      }
+      if (!userId) return json(401, { ok: false, error: "Invalid auth", req_id: reqId });
+      if (!game.isRunning || !game.question) return json(400, { ok: false, error: "No active round", req_id: reqId });
+      if (!game.players.has(userId)) return json(400, { ok: false, error: "Not joined", req_id: reqId });
+      if (game.answers.has(userId)) return json(400, { ok: false, error: "Already answered", req_id: reqId });
+
+      const choice = Number(body.choice);
+      const ms = Math.max(0, nowMs() - game.roundStartMs);
+      game.answers.set(userId, { choice, ms });
+      // maybe end early
+      endRoundIfNeeded();
+      return json(200, { ok: true, req_id: reqId });
+    }
+
+    return json(404, { ok: false, error: `Not found: ${method} ${p}`, req_id: reqId });
+  } catch (err) {
+    log("error", "handler_exception", {
+      req_id: reqId,
+      error: String(err && err.stack ? err.stack : err),
     });
+    return json(500, { ok: false, error: "Server error", req_id: reqId });
   }
-
-  if (isAnswer && method === "POST") {
-    if (!BOT_TOKEN) {
-      return json(500, { ok: false, error: "Server misconfigured: BOT_TOKEN is missing in Netlify env vars." });
-    }
-    if (!userId) return json(401, { ok: false, error: "Invalid auth" });
-    if (!game.isRunning || !game.question) return json(400, { ok: false, error: "No active round" });
-    if (!game.players.has(userId)) return json(400, { ok: false, error: "Not joined" });
-    if (game.answers.has(userId)) return json(400, { ok: false, error: "Already answered" });
-
-    const choice = Number(body.choice);
-    const ms = Math.max(0, nowMs() - game.roundStartMs);
-    game.answers.set(userId, { choice, ms });
-    // maybe end early
-    endRoundIfNeeded();
-    return json(200, { ok: true });
-  }
-
-  return json(404, { ok: false, error: `Not found: ${method} ${p}` });
 };
 
 

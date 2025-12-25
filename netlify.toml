@@ -5,6 +5,12 @@
 [build.environment]
   PYTHON_VERSION = "3.11"
 
+# Ensure bundled serverless functions have access to static assets they read at runtime.
+# Without this, `public/vocab.json` may not be present in the function filesystem on Netlify.
+[functions]
+  directory = "netlify/functions"
+  included_files = ["public/vocab.json"]
+
 # API routes to Netlify Function (preserve path for routing)
 [[redirects]]
   from = "/api/*"

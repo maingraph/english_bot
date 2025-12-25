@@ -3,7 +3,6 @@ from telegram import (
     InlineKeyboardMarkup,
     KeyboardButton,
     ReplyKeyboardMarkup,
-    WebAppInfo,
 )
 
 from .runtime import get_tma_url
@@ -25,12 +24,12 @@ def kb_options(
 
 
 def reply_kb_main() -> ReplyKeyboardMarkup:
-    tma_url = get_tma_url()
-    play_btn = (
-        KeyboardButton("🎮 Play (Mini App)", web_app=WebAppInfo(url=tma_url))
-        if tma_url
-        else KeyboardButton("🎮 Play (Mini App)")
-    )
+    # Important: don't use ReplyKeyboard "web_app" buttons here.
+    # Some Telegram clients open those like a normal browser link, resulting in
+    # missing WebApp initData (and "Invalid auth").
+    # Instead, users tap this button and the bot replies with an InlineKeyboard
+    # WebApp button (handled in handlers/player.py cmd_play).
+    play_btn = KeyboardButton("🎮 Play (Mini App)")
     keyboard = [
         [play_btn],
         [KeyboardButton("🎮 Join & Play"), KeyboardButton("⏸ Pause")],

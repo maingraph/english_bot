@@ -658,6 +658,55 @@
     .admin-btn.start { background: var(--accent); color: white; }
     .admin-btn.next { background: var(--warning); color: #1a1a1a; }
     .admin-btn.reset { background: var(--error); color: white; }
+
+    /* Debug panel (hidden by default, toggle with 5 taps on title) */
+    .debug-fab {
+      position: fixed;
+      right: 14px;
+      bottom: 78px;
+      z-index: 200;
+      display: none;
+      padding: 10px 12px;
+      border-radius: 999px;
+      background: rgba(36, 36, 36, 0.92);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .debug-panel {
+      position: fixed;
+      left: 12px;
+      right: 12px;
+      bottom: 78px;
+      z-index: 250;
+      display: none;
+      background: rgba(15, 15, 15, 0.97);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+      max-height: 45vh;
+      overflow: auto;
+    }
+    .debug-panel.active { display: block; }
+    .debug-actions { display: flex; gap: 8px; margin-top: 10px; }
+    .debug-action {
+      flex: 1;
+      padding: 10px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      color: var(--text-primary);
+      font-weight: 700;
+      font-size: 12px;
+    }
+    .debug-pre {
+      white-space: pre-wrap;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 11px;
+      color: #e5e7eb;
+      line-height: 1.35;
+    }
   </style>
 </head>
 <body>
@@ -666,7 +715,7 @@
     <div id="welcome-screen" class="screen active">
       <div class="welcome-header">
         <div class="welcome-icon">🎯</div>
-        <h1 class="welcome-title">Vocab Duel</h1>
+        <h1 class="welcome-title" id="app-title">Vocab Duel</h1>
         <p class="welcome-subtitle">Test your vocabulary in a fast-paced quiz battle!</p>
       </div>
 
@@ -802,6 +851,17 @@
     <button class="admin-btn reset" onclick="adminReset()">Reset</button>
   </div>
 
+  <!-- Debug -->
+  <button class="debug-fab" id="debug-fab" onclick="toggleDebug()">Debug</button>
+  <div class="debug-panel" id="debug-panel">
+    <div class="debug-pre" id="debug-pre">Debug panel</div>
+    <div class="debug-actions">
+      <button class="debug-action" onclick="copyDebug()">Copy debug</button>
+      <button class="debug-action" onclick="fetchServerDebug()">Server debug</button>
+      <button class="debug-action" onclick="toggleDebug()">Close</button>
+    </div>
+  </div>
+
   <script>
     // Telegram WebApp
     const tg = window.Telegram?.WebApp;
@@ -811,6 +871,10 @@
     let currentScreen = 'welcome';
     let pollingInterval = null;
     let lastState = null;
+    let lastApiError = null;
+    let lastApiTrace = [];
+    let debugEnabled = false;
+    let debugTapTimes = [];
 
     // Admin token (set via URL param ?admin=token)
     const urlParams = new URLSearchParams(window.location.search);
@@ -840,6 +904,12 @@
       console.warn('Admin token present, but not running inside Telegram WebApp. Admin controls are disabled.');
     }
 
+    function pushTrace(item) {
+      lastApiTrace.push({ ts: new Date().toISOString(), ...item });
+      while (lastApiTrace.length > 40) lastApiTrace.shift();
+      if (debugEnabled) renderDebug();
+    }
+
     // API helpers (Netlify redirect: /api/* -> /.netlify/functions/tma-api/*)
     async function api(method, endpoint, body = null) {
       const headers = {
@@ -851,8 +921,21 @@
       }
       const opts = { method, headers };
       if (body) opts.body = JSON.stringify(body);
+      const started = Date.now();
       const res = await fetch(endpoint, opts);
-      return res.json();
+      const raw = await res.text();
+      let data = null;
+      try {
+        data = raw ? JSON.parse(raw) : {};
+      } catch {
+        data = { ok: false, error: "Non-JSON response from server", http_status: res.status, raw: raw.slice(0, 300) };
+      }
+      pushTrace({ kind: "api", method, endpoint, ms: Date.now() - started, http_status: res.status, ok: data?.ok, error: data?.error || null });
+      if (!res.ok || data?.ok === false) {
+        lastApiError = { method, endpoint, http_status: res.status, data };
+        if (debugEnabled) renderDebug();
+      }
+      return data;
     }
 
     // Screen management
@@ -908,10 +991,21 @@
     async function fetchState() {
       try {
         const state = await api('GET', '/api/state');
+        if (!state || state.ok === false) {
+          // Keep UI, but surface an actionable message.
+          if (currentScreen === 'game') {
+            document.getElementById('question-text').textContent =
+              (state && state.error) ? state.error : 'Server error while loading game state.';
+          }
+          return;
+        }
         updateUI(state);
         lastState = state;
+        if (debugEnabled) renderDebug();
       } catch (e) {
         console.error('Fetch state error:', e);
+        lastApiError = { method: "GET", endpoint: "/api/state", exception: String(e && e.message ? e.message : e) };
+        if (debugEnabled) renderDebug();
       }
     }
 
@@ -952,6 +1046,11 @@
           document.getElementById('question-type').textContent = state.question.task_type;
           document.getElementById('question-text').innerHTML = state.question.prompt;
           renderOptions(state.question.options, state.already_answered);
+        } else {
+          document.getElementById('question-type').textContent = 'QUESTION';
+          document.getElementById('question-text').textContent =
+            state.server_warning ? state.server_warning : 'Waiting for the next question...';
+          document.getElementById('options').innerHTML = '';
         }
 
         // Mini leaderboard
@@ -1064,6 +1163,71 @@
       const div = document.createElement('div');
       div.textContent = text;
       return div.innerHTML;
+    }
+
+    // ---- Debug UI ----
+    function toggleDebug() {
+      debugEnabled = !debugEnabled;
+      document.getElementById('debug-panel').classList.toggle('active', debugEnabled);
+      document.getElementById('debug-fab').style.display = debugEnabled ? 'none' : (debugTapTimes.length ? 'block' : 'none');
+      if (debugEnabled) renderDebug();
+    }
+
+    function renderDebug() {
+      const payload = {
+        inTelegram,
+        myUserId,
+        isAdmin,
+        currentScreen,
+        initDataLength: initData ? initData.length : 0,
+        adminTokenPresent: Boolean(adminToken),
+        lastState,
+        lastApiError,
+        lastApiTrace,
+        ua: navigator.userAgent,
+        time: new Date().toISOString(),
+      };
+      document.getElementById('debug-pre').textContent = JSON.stringify(payload, null, 2);
+    }
+
+    async function copyDebug() {
+      try {
+        await navigator.clipboard.writeText(document.getElementById('debug-pre').textContent);
+        alert('Debug copied. Send it to me if something breaks.');
+      } catch {
+        alert('Copy failed. Screenshot this panel instead.');
+      }
+    }
+
+    async function fetchServerDebug() {
+      if (!isAdmin) {
+        alert('Server debug is admin-only. Open the admin panel to use this.');
+        return;
+      }
+      const res = await api('GET', '/api/debug');
+      if (!res.ok) {
+        alert(res.error || 'Server debug failed');
+        return;
+      }
+      lastApiTrace.push({ ts: new Date().toISOString(), kind: "server_debug", vocab_count: res.vocab_count, version: res.version });
+      lastState = lastState || {};
+      lastState.__server_debug = res;
+      renderDebug();
+    }
+
+    // 5 taps on title toggles debug entry
+    const titleEl = document.getElementById('app-title');
+    if (titleEl) {
+      titleEl.addEventListener('click', () => {
+        const now = Date.now();
+        debugTapTimes = debugTapTimes.filter((t) => now - t < 1500);
+        debugTapTimes.push(now);
+        if (debugTapTimes.length >= 5) {
+          document.getElementById('debug-fab').style.display = debugEnabled ? 'none' : 'block';
+          debugTapTimes = [];
+          alert('Debug unlocked. Tap the Debug button.');
+        }
+      });
     }
 
     // Start polling on load
