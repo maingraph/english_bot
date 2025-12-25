@@ -829,11 +829,15 @@
       document.documentElement.style.setProperty('--text-primary', tg.themeParams.text_color || '#ffffff');
     }
 
-    // Check if admin
-    if (adminToken) {
+    const inTelegram = Boolean(tg && initData);
+
+    // Admin panel should only be enabled inside Telegram WebApp.
+    if (adminToken && inTelegram) {
       isAdmin = true;
       document.getElementById('admin-panel').classList.add('active');
       document.body.style.paddingBottom = '60px';
+    } else if (adminToken && !inTelegram) {
+      console.warn('Admin token present, but not running inside Telegram WebApp. Admin controls are disabled.');
     }
 
     // API helpers (Netlify redirect: /api/* -> /.netlify/functions/tma-api/*)
@@ -866,6 +870,10 @@
 
     // Join game
     async function joinGame() {
+      if (!initData) {
+        alert("Open this game from Telegram via the bot button (Mini App). Opening this URL in a browser won't work.");
+        return;
+      }
       const btn = document.getElementById('join-btn');
       btn.disabled = true;
       btn.textContent = 'Joining...';
@@ -1027,20 +1035,24 @@
 
     // Admin functions
     async function adminOpen() {
-      await api('POST', '/api/admin/open', { rounds: 10, seconds: 12 });
+      const res = await api('POST', '/api/admin/open', { rounds: 10, seconds: 12 });
+      if (!res.ok) alert(res.error || 'Admin Open failed');
     }
 
     async function adminStart() {
-      await api('POST', '/api/admin/start');
+      const res = await api('POST', '/api/admin/start');
+      if (!res.ok) alert(res.error || 'Admin Start failed');
     }
 
     async function adminNext() {
-      await api('POST', '/api/admin/next');
+      const res = await api('POST', '/api/admin/next');
+      if (!res.ok) alert(res.error || 'Admin Next failed');
     }
 
     async function adminReset() {
       if (confirm('Reset the game?')) {
-        await api('POST', '/api/admin/reset');
+        const res = await api('POST', '/api/admin/reset');
+        if (!res.ok) alert(res.error || 'Admin Reset failed');
         showScreen('welcome');
         document.getElementById('join-btn').disabled = false;
         document.getElementById('join-btn').innerHTML = '✨ Join Game';

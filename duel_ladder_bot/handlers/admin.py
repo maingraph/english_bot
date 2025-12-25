@@ -2,7 +2,7 @@ import html
 import time
 from typing import Tuple
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
 from telegram.ext import ContextTypes
 
 from .. import state
@@ -63,10 +63,22 @@ async def cmd_tma_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             "TMA_URL is not configured. Set env var TMA_URL and restart."
         )
         return
+    admin_url = f"{tma_url}/?admin={ADMIN_TOKEN}"
+    kb = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "🛠 Open Admin Panel (Mini App)", web_app=WebAppInfo(url=admin_url)
+                )
+            ]
+        ]
+    )
     await update.effective_message.reply_text(
-        "🛠 Mini App admin link (keep this private):\n"
-        f"{tma_url}/?admin={ADMIN_TOKEN}",
-        reply_markup=reply_kb_main(),
+        "🛠 <b>Admin Mini App</b>\n\n"
+        "Open it using the button below (this ensures Telegram passes auth).\n\n"
+        f"Raw link (may open in browser): {admin_url}",
+        parse_mode="HTML",
+        reply_markup=kb,
     )
 
 

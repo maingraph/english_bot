@@ -20,6 +20,10 @@ const path = require("path");
 
 const BOT_TOKEN = process.env.BOT_TOKEN || "";
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || "classroom2024";
+const ADMIN_IDS = (process.env.ADMIN_IDS || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 
 // Load vocab once (bundled from public/vocab.json)
 let VOCAB = [];
@@ -86,6 +90,12 @@ function parseInitData(initData) {
   } catch {
     return null;
   }
+}
+
+function isTelegramAdmin(userId) {
+  if (!userId) return false;
+  if (!ADMIN_IDS.length) return true; // if not configured, allow (safe for single-teacher demos)
+  return ADMIN_IDS.includes(String(userId));
 }
 
 function header(headers, name) {
@@ -225,7 +235,18 @@ exports.handler = async (event) => {
   // Admin endpoints
   if (isAdmin) {
     const adminToken = header(headers, "X-Admin-Token");
-    if (adminToken !== ADMIN_TOKEN) return json(403, { ok: false, error: "Unauthorized" });
+    if (!BOT_TOKEN) {
+      return json(500, { ok: false, error: "Server misconfigured: BOT_TOKEN is missing in Netlify env vars." });
+    }
+    if (!userId) {
+      return json(401, { ok: false, error: "Invalid auth: open this inside Telegram (initData missing/invalid)." });
+    }
+    if (!isTelegramAdmin(userId)) {
+      return json(403, { ok: false, error: "Admins only (your Telegram user_id is not in ADMIN_IDS)." });
+    }
+    if (adminToken !== ADMIN_TOKEN) {
+      return json(403, { ok: false, error: "Unauthorized (bad admin token)." });
+    }
 
     if (method !== "POST") return json(405, { ok: false, error: "Method not allowed" });
 
@@ -281,7 +302,16 @@ exports.handler = async (event) => {
 
   // Player endpoints
   if (isJoin && method === "POST") {
-    if (!userId) return json(401, { ok: false, error: "Invalid auth" });
+    if (!BOT_TOKEN) {
+      return json(500, { ok: false, error: "Server misconfigured: BOT_TOKEN is missing in Netlify env vars." });
+    }
+    if (!userId) {
+      return json(401, {
+        ok: false,
+        error:
+          "Invalid auth. Open the Mini App from the bot button inside Telegram (not a browser link).",
+      });
+    }
     if (!game.isOpen || game.isRunning || game.isFinished) {
       return json(400, { ok: false, error: "Lobby not open (host must press Open)." });
     }
@@ -317,6 +347,9 @@ exports.handler = async (event) => {
   }
 
   if (isAnswer && method === "POST") {
+    if (!BOT_TOKEN) {
+      return json(500, { ok: false, error: "Server misconfigured: BOT_TOKEN is missing in Netlify env vars." });
+    }
     if (!userId) return json(401, { ok: false, error: "Invalid auth" });
     if (!game.isRunning || !game.question) return json(400, { ok: false, error: "No active round" });
     if (!game.players.has(userId)) return json(400, { ok: false, error: "Not joined" });
