@@ -381,6 +381,56 @@
       opacity: 0.7;
     }
 
+    /* Opponent Card */
+    .opponent-card {
+      background: var(--bg-card);
+      border-radius: var(--radius);
+      padding: 16px;
+      text-align: center;
+      margin-bottom: 16px;
+      border: 2px solid var(--accent);
+    }
+
+    .opponent-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent-light);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .opponent-name {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    /* Rest Period Card */
+    .rest-period-card {
+      background: var(--bg-card);
+      border-radius: var(--radius);
+      padding: 24px;
+      text-align: center;
+      margin-bottom: 16px;
+      border: 2px solid var(--warning);
+    }
+
+    .rest-icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+    }
+
+    .rest-text {
+      font-size: 15px;
+      color: var(--text-secondary);
+    }
+
+    .rest-text span {
+      color: var(--warning);
+      font-weight: 700;
+    }
+
     .option-key {
       width: 28px;
       height: 28px;
@@ -727,14 +777,18 @@
         </div>
         <div class="rule-item">
           <span class="rule-num">2</span>
-          <span class="rule-text">Answer vocabulary questions as fast as you can</span>
+          <span class="rule-text">Get randomly paired with another player each round</span>
         </div>
         <div class="rule-item">
           <span class="rule-num">3</span>
-          <span class="rule-text">Earn 2 points for fast answers, 1 for slower ones</span>
+          <span class="rule-text">Answer faster than your opponent to win the duel</span>
         </div>
         <div class="rule-item">
           <span class="rule-num">4</span>
+          <span class="rule-text">Earn 2 points for fast answers, 1 for slower ones</span>
+        </div>
+        <div class="rule-item">
+          <span class="rule-num">5</span>
           <span class="rule-text">Climb the leaderboard and win!</span>
         </div>
       </div>
@@ -787,9 +841,19 @@
           <div class="score-label">Points</div>
         </div>
         <div class="score-item">
-          <div class="score-value" id="my-correct">0</div>
-          <div class="score-label">Correct</div>
+          <div class="score-value" id="my-wins">0</div>
+          <div class="score-label">Wins</div>
         </div>
+      </div>
+
+      <div id="opponent-card" class="opponent-card" style="display: none;">
+        <div class="opponent-label">⚔️ VS</div>
+        <div class="opponent-name" id="opponent-name">Player</div>
+      </div>
+
+      <div id="rest-period-card" class="rest-period-card" style="display: none;">
+        <div class="rest-icon">⏸️</div>
+        <div class="rest-text">Round ended! Next round starting in <span id="rest-time">5</span>s...</div>
       </div>
 
       <div class="question-card">
@@ -822,6 +886,10 @@
           <div class="my-stat">
             <div class="my-stat-value" id="final-score">0</div>
             <div class="my-stat-label">Points</div>
+          </div>
+          <div class="my-stat">
+            <div class="my-stat-value" id="final-wins">0</div>
+            <div class="my-stat-label">Wins</div>
           </div>
           <div class="my-stat">
             <div class="my-stat-value" id="final-correct">0</div>
@@ -1028,29 +1096,56 @@
         document.getElementById('current-round').textContent = state.current_round;
         document.getElementById('total-rounds').textContent = state.total_rounds;
         
-        // Timer
-        const timeLeft = Math.ceil(state.time_remaining);
-        document.getElementById('time-left').textContent = timeLeft;
-        const timer = document.getElementById('timer');
-        timer.classList.remove('warning', 'danger');
-        if (timeLeft <= 3) timer.classList.add('danger');
-        else if (timeLeft <= 6) timer.classList.add('warning');
+        // Rest period
+        const inRest = state.in_rest_period || false;
+        const restCard = document.getElementById('rest-period-card');
+        const opponentCard = document.getElementById('opponent-card');
+        const questionCard = document.querySelector('.question-card');
+        const optionsContainer = document.getElementById('options');
 
-        // My stats
-        document.getElementById('my-rank').textContent = state.my_rank ? `#${state.my_rank}` : '-';
-        document.getElementById('my-score').textContent = state.my_score || 0;
-        document.getElementById('my-correct').textContent = state.my_correct || 0;
-
-        // Question
-        if (state.question) {
-          document.getElementById('question-type').textContent = state.question.task_type;
-          document.getElementById('question-text').innerHTML = state.question.prompt;
-          renderOptions(state.question.options, state.already_answered);
+        if (inRest) {
+          restCard.style.display = 'block';
+          opponentCard.style.display = 'none';
+          questionCard.style.display = 'none';
+          optionsContainer.innerHTML = '';
+          const restTime = Math.ceil(state.rest_remaining || 0);
+          document.getElementById('rest-time').textContent = restTime;
         } else {
-          document.getElementById('question-type').textContent = 'QUESTION';
-          document.getElementById('question-text').textContent =
-            state.server_warning ? state.server_warning : 'Waiting for the next question...';
-          document.getElementById('options').innerHTML = '';
+          restCard.style.display = 'none';
+          questionCard.style.display = 'block';
+
+          // Opponent
+          if (state.opponent) {
+            opponentCard.style.display = 'block';
+            document.getElementById('opponent-name').textContent = state.opponent.name;
+          } else {
+            opponentCard.style.display = 'none';
+          }
+
+          // Timer
+          const timeLeft = Math.ceil(state.time_remaining || 0);
+          document.getElementById('time-left').textContent = timeLeft;
+          const timer = document.getElementById('timer');
+          timer.classList.remove('warning', 'danger');
+          if (timeLeft <= 3) timer.classList.add('danger');
+          else if (timeLeft <= 6) timer.classList.add('warning');
+
+          // My stats
+          document.getElementById('my-rank').textContent = state.my_rank ? `#${state.my_rank}` : '-';
+          document.getElementById('my-score').textContent = state.my_score || 0;
+          document.getElementById('my-wins').textContent = state.my_wins || 0;
+
+          // Question
+          if (state.question) {
+            document.getElementById('question-type').textContent = state.question.task_type;
+            document.getElementById('question-text').innerHTML = state.question.prompt;
+            renderOptions(state.question.options, state.already_answered);
+          } else {
+            document.getElementById('question-type').textContent = 'QUESTION';
+            document.getElementById('question-text').textContent =
+              state.server_warning ? state.server_warning : 'Waiting for pairing...';
+            optionsContainer.innerHTML = '';
+          }
         }
 
         // Mini leaderboard
@@ -1097,6 +1192,7 @@
     function renderResults(state) {
       document.getElementById('final-rank').textContent = state.my_rank || '?';
       document.getElementById('final-score').textContent = state.my_score || 0;
+      document.getElementById('final-wins').textContent = state.my_wins || 0;
       document.getElementById('final-correct').textContent = state.my_correct || 0;
 
       const container = document.getElementById('full-leaderboard');
